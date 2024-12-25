@@ -15,11 +15,14 @@ contract NFTMarket is ReentrancyGuard, Ownable {
     Counters.Counter private _itemIds;
     // For sold item of each user
     //Counters.Counter private _itemsSold;
-    mapping(address => Counters.Counter) private itemsSold;
+    // For global items for sale (MarketPlace owner + customers)
+    Counters.Counter private _itemsForSale;
+    //For each user items for sale
+    mapping(address => Counters.Counter) private itemsForSale;
     // Owner of market i.e. contract address 
     address payable MKPOwner;
     // Listing Fee
-    uint256 listingPrice = 0.0045 ether;
+    uint256 listingPrice = 0.000045 ether;
     
     constructor() Ownable(msg.sender) {
         //owner = payable(msg.sender);
@@ -34,7 +37,7 @@ contract NFTMarket is ReentrancyGuard, Ownable {
         address payable seller;
         address payable owner;
         uint256 price;
-        bool sold;
+        bool forSale;
     }
     
     // itemId that returns MarketItem
@@ -48,7 +51,7 @@ contract NFTMarket is ReentrancyGuard, Ownable {
         address seller,
         address owner,
         uint256 price,
-        bool sold
+        bool forSale
     );
 
     // Returns the listing price of the contract
@@ -61,20 +64,26 @@ contract NFTMarket is ReentrancyGuard, Ownable {
     function createMarketItem(address nftContract, uint256 tokenId, uint256 price) public nonReentrant onlyOwner {
 
         require(price > 0, "NFT Price must be at least 1 wei");
-        //require(msg.value == listingPrice, "Passed Value must be equal to listing price");
 
+        // Increment items total count and set current counter value
         _itemIds.increment();
         uint256 itemId = _itemIds.current();
+
+        // Increment global items for sale counter
+        _itemsForSale.increment();
+
+        // Increment MarketPlace's items for sale
+        itemsForSale[msg.sender].increment();
 
         // Generate new marketItem
         idToMarketItem[itemId] =  MarketItem(
             itemId,
             nftContract,
             tokenId,
-            payable(msg.sender),
-            payable(address(0)),
+            payable(msg.sender),    //seller
+            payable(address(this)), //owner
             price,
-            false
+            true
         );
 
         // Changing ownership of NFT to MarketPlace Contract so MKP Contract interact with it.
@@ -86,9 +95,9 @@ contract NFTMarket is ReentrancyGuard, Ownable {
             nftContract,
             tokenId,
             msg.sender,
-            address(0),
+            msg.sender,
             price,
-            false
+            true
         );
     }
 
@@ -114,14 +123,16 @@ contract NFTMarket is ReentrancyGuard, Ownable {
         
         // Update Owner and Sold Details
         idToMarketItem[itemId].owner = payable(msg.sender);
-        idToMarketItem[itemId].sold = true;
-        //_itemsSold.increment();
-        itemsSold[idToMarketItem[itemId].seller].increment();
+        idToMarketItem[itemId].forSale = false;
+
+        // Decrement items for sale counters
+        _itemsForSale.decrement();
+        itemsForSale[idToMarketItem[itemId].seller].decrement();
 
         // Transfer listing price to owner of MarketPlace
         //payable(owner).transfer(listingPrice);
-        // If the seller is the MarketPlace owner, it means that the MarketPlace owner put the item on the MarketPlace (using CreateMarketItem)
-        // No listing price is payed by the MarketPlace owner when they put an item on the MarketPlace --> no listing price to pay to the MarketPlace here
+        // If the seller is the MarketPlace owner, then he previously put the item on the MarketPlace using CreateMarketItem.
+        // No listing price is payed by the MarketPlace owner when he puts an item on the MarketPlace --> no listing price to pay forward to the MarketPlace here
         if (idToMarketItem[itemId].seller != MKPOwner) {
             //payable(owner).transfer(listingPrice);
             MKPOwner.transfer(listingPrice);
@@ -129,7 +140,7 @@ contract NFTMarket is ReentrancyGuard, Ownable {
     }
 
     // 1.3. Put an owned item on sale on the MarketPlace
-    // Requires NFT owner to approve MarketPlace contract for the NFT beforehand
+    // NB : requires NFT owner to approve MarketPlace contract for the NFT beforehand (NFT contract)
     function putItemOnSale(address nftContract, uint256 itemId, uint256 newPrice) public payable nonReentrant {
 
         // Caller must own the item
@@ -144,48 +155,69 @@ contract NFTMarket is ReentrancyGuard, Ownable {
         // Update Item Details
         idToMarketItem[itemId].seller = payable(msg.sender);
         idToMarketItem[itemId].price = newPrice; 
-        idToMarketItem[itemId].sold = false;
+        idToMarketItem[itemId].forSale = true;
+
+        // Increment items for sale counters
+        _itemsForSale.increment();
+        itemsForSale[idToMarketItem[itemId].seller].increment();
 
         // Changing ownership of NFT to MarketPlace Contract so MKP Contract interact with it.
         IERC721(nftContract).transferFrom(msg.sender, address(this), idToMarketItem[itemId].tokenId);
 
     }
 
-    // 2.Function for Frontend i.e. Return all unsold, my purchase & my created Items
-    // 2.1.Returns all unsold market items 
-    function fetchMarketItems() public view returns (MarketItem[] memory) {
+    // 2.Function for Frontend i.e. Return all for sale items, my NFTs,...
+    // 2.1.Returns all for sale market items (MarketPlace and customers)
+    function fetchItemsForSale() public view returns (MarketItem[] memory) {
 
         uint itemCount = _itemIds.current();
-        uint unsoldItemCount = _itemIds.current() - itemsSold[address(this)].current();
+        //uint unsoldItemCount = _itemIds.current() - itemsSold[address(this)].current();
+        uint forSaleItemCount = _itemsForSale.current();
         uint currentIndex = 0;
-        // Declear MarketItem(i.e. struct) type array of length unsold Item number 
-        MarketItem[] memory items = new MarketItem[](unsoldItemCount);
+
+        // Declear MarketItem(i.e. struct) type array of length for sale Item number 
+        MarketItem[] memory items = new MarketItem[](forSaleItemCount);
+// debug
+console.log(string.concat("itemCount = ", Strings.toString(itemCount)));
+console.log(string.concat("forSaleItemCount = ", Strings.toString(forSaleItemCount)));
+
+//
+        // Loop in all existing items
         for (uint i = 0; i < itemCount; i++) {
-        if (idToMarketItem[i + 1].owner == address(0)) {
-            uint currentId = i + 1;
-            MarketItem storage currentItem = idToMarketItem[currentId];
-            items[currentIndex] = currentItem;
-            currentIndex += 1;
-        }
+
+console.log(string.concat("idToMarketItem[", Strings.toString(i+1), "] = ", idToMarketItem[i + 1].forSale ? "True" : "False"));
+
+            // If item is for sale, store it in the array to be returned
+            if (idToMarketItem[i + 1].forSale == true) {
+                uint currentId = i + 1;
+                MarketItem storage currentItem = idToMarketItem[currentId];
+                items[currentIndex] = currentItem;
+                currentIndex += 1;
+            }
         }
         return items;
     }
 
-    // 2.2.Returns only items that a user has purchased 
-    function fetchMyNFTs() public view returns (MarketItem[] memory) {
+    // 2.2.Returns a specific user items 
+    function fetchUserNFTs() public view returns (MarketItem[] memory) {
+        
         uint totalItemCount = _itemIds.current();
         uint userItemCount = 0;
         uint currentIndex = 0;
+
         // Getting total number of user's Token
         for (uint i = 0; i < totalItemCount; i++) {
             if (idToMarketItem[i + 1].owner == msg.sender) {
                 userItemCount += 1;
             }
         }
+
         // Declear MarketItem(i.e. struct) type array of length user's Item number
         MarketItem[] memory items = new MarketItem[](userItemCount);
+        
         // Stores user TokenId's in item
         for (uint i = 0; i < totalItemCount; i++) {
+            // If item owner is the caller
             if (idToMarketItem[i + 1].owner == msg.sender) {
                 uint currentId = idToMarketItem[i + 1].itemId; // Current Token Id
                 MarketItem storage currentItem = idToMarketItem[currentId];
@@ -196,31 +228,9 @@ contract NFTMarket is ReentrancyGuard, Ownable {
         return items;
     }
 
-    // 2.3.Returns only items a user has created 
-    function fetchItemsCreated() public view returns (MarketItem[] memory) {
-        uint totalItemCount = _itemIds.current();
-        uint userItemCount = 0;
-        uint currentIndex = 0;
-        // Getting total number of user's Token
-        for (uint i = 0; i < totalItemCount; i++) {
-            if (idToMarketItem[i + 1].seller == msg.sender) {
-                userItemCount += 1;
-            }
-        }
-        // Declear MarketItem(i.e. struct) type array of length user's  Item number
-        MarketItem[] memory items = new MarketItem[](userItemCount);
-        // Stores user TokenId's in item
-        for (uint i = 0; i < totalItemCount; i++) {
-            if (idToMarketItem[i + 1].seller == msg.sender) {
-                uint currentId = idToMarketItem[i + 1].itemId;
-                MarketItem storage currentItem = idToMarketItem[currentId];
-                items[currentIndex] = currentItem;
-                currentIndex += 1;
-            }
-        }
-        return items;
-    }
 
+    // FOR TESTS (remove before production deployment)
+    //---------------------------------------------------------------------
     // JFB : récupérer la balance du contrat
     function getMkpBalance() public view returns (uint256) {
         return address(this).balance;
