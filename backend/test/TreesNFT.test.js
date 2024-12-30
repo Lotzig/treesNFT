@@ -70,6 +70,20 @@ describe("TreesNFT contract tests", function () {
         expect(await treesNFT.createToken("TokenURI")).to.emit(treesNFT, "Transfer").withArgs({from: ZeroAddress, to: owner.address, tokenId: firstTokenId});
     });
   
-  }); //describe("Mint an NFT"
+    it("Should approve Marketplace contract for the new NFT", async function () {
+      const { treesNFT, treesNFTMarket, owner } = await loadFixture(deployTreesNFTFixture);
+      const firstTokenId = 1;
+      
+      //Create a new NFT
+      await treesNFT.createToken("TokenURI");
+
+      // Get the approved address for the new token (id = 1)
+      const approvedAddress = await treesNFT.getApproved(1);
+
+      // Check that approved address is the Marketplace one
+      expect(approvedAddress).to.equal(await treesNFTMarket.getAddress());
+  });
+
+}); //describe("Mint an NFT"
 
 }); //describe("TreesNFT contract tests"
