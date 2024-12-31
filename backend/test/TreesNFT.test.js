@@ -82,8 +82,8 @@ describe("TreesNFT contract tests", function () {
 
       // Check that approved address is the Marketplace one
       expect(approvedAddress).to.equal(await treesNFTMarket.getAddress());
-  });
+    });
 
-}); //describe("Mint an NFT"
+  }); //describe("Mint an NFT"
 
 }); //describe("TreesNFT contract tests"
