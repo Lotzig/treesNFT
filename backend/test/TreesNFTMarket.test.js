@@ -29,7 +29,7 @@ describe("TreesNFTMarket contract tests", function () {
     const treesNFT = await TreesNFT.deploy(marketContractAddress);
     const nftContractAddress = await treesNFT.getAddress();
 
-    return { treesNFTMarket, treesNFT, nftContractAddress, owner, customer1, customer2, customer3 };
+    return { treesNFTMarket, marketContractAddress, treesNFT, nftContractAddress, owner, customer1, customer2, customer3 };
   }
 
   describe("Deployment", function () {
@@ -217,6 +217,7 @@ describe("TreesNFTMarket contract tests", function () {
                     .to.be.revertedWith("Item is not for sale");
       });
 
+
       it("Should revert if the passed value does not match the item price", async function () {
         const { treesNFT, treesNFTMarket, nftContractAddress, customer1 } = await loadFixture(deployContractsFixture);
         
@@ -235,12 +236,16 @@ describe("TreesNFTMarket contract tests", function () {
                     .to.be.revertedWith("Please submit the asking price in order to complete the purchase");
       });
 
+
       it("Should emit the purchase event (purchase success)", async function () {
-        const { treesNFT, treesNFTMarket, nftContractAddress, owner, customer1 } = await loadFixture(deployContractsFixture);
+
+        const { treesNFT, treesNFTMarket, nftContractAddress, marketContractAddress, owner, customer1, customer2 } = await loadFixture(deployContractsFixture);
         
         const tokenId = 1;
         const itemId = 1;
         const price = 15000000000000000000n;
+        const newPrice = 25000000000000000000n;
+        const listingPrice = await treesNFTMarket.getListingPrice();
 
         // Create a token (tokenId = 1)
         await treesNFT.createToken("URI_1");
@@ -248,10 +253,21 @@ describe("TreesNFTMarket contract tests", function () {
         // Create an item for new token
         await treesNFTMarket.createMarketItem(nftContractAddress, tokenId, price);
 
-        // Purchase the item
-        expect(await treesNFTMarket.connect(customer1).purchaseItem(nftContractAddress, tokenId, {value: price}))
+        // Customer1 purchases the item
+        await treesNFTMarket.connect(customer1).purchaseItem(nftContractAddress, itemId, {value: 15000000000000000000n});
+
+        // Customer 1 will resale the item to customer2 in order to cover listing price transfer to the marketplace owner
+        // Customer1 approves marketplace for token
+        await treesNFT.connect(customer1).approve(marketContractAddress, tokenId);
+
+        // Customer1 puts the item on sale passing the right listing price
+        expect(await treesNFTMarket.connect(customer1).putItemOnSale(nftContractAddress, itemId, newPrice, {value: listingPrice}))
+
+        // Customer2 purchases the item (listing price will be transfered to marketplace owner)
+        expect(await treesNFTMarket.connect(customer2).purchaseItem(nftContractAddress, tokenId, {value: newPrice}))
               .to.emit(treesNFT, "MarketItemPurchased")
-              .withArgs({itemId: 1, tokenId: tokenId, price: price, seller: owner.address, owner: customer1.address, nftContract: nftContractAddress, forSale: false});
+              .withArgs({itemId: 1, tokenId: tokenId, price: price, seller: customer1.address, owner: customer2.address, 
+                        nftContract: nftContractAddress, forSale: false});
       });
       
     }); //describe("Purchase a marketplace item"
@@ -260,7 +276,7 @@ describe("TreesNFTMarket contract tests", function () {
     describe("Put an item on sale", function () {
 
       it("Should revert if item does not exist (the caller can therefore not be the item owner", async function () {
-        const { treesNFT, treesNFTMarket, nftContractAddress, customer1 } = await loadFixture(deployContractsFixture);
+        const { treesNFTMarket, nftContractAddress } = await loadFixture(deployContractsFixture);
         
         const itemId = 1;
         const newPrice = 15000000000000000000n;
@@ -295,6 +311,119 @@ describe("TreesNFTMarket contract tests", function () {
         const tokenId = 1;
         const itemId = 1;
         const price = 15000000000000000000n;
+        const newPrice = 25000000000000000000n;
+
+        // Create a token (tokenId = 1)
+        await treesNFT.createToken("URI_1");
+
+        // Create an item for new token (automatically puts the item on sale)
+        await treesNFTMarket.createMarketItem(nftContractAddress, tokenId, price);
+
+        // Attempt to put the item on sale
+        await expect(treesNFTMarket.putItemOnSale(nftContractAddress, itemId, newPrice))
+                    .to.be.revertedWith("Item already is for sale");
+      });
+
+
+      it("Should revert if caller is not the marketplace owner and does not pass any value for listing price", async function () {
+        const { treesNFT, treesNFTMarket, nftContractAddress, customer1 } = await loadFixture(deployContractsFixture);
+        
+        const tokenId = 1;
+        const itemId = 1;
+        const price = 15000000000000000000n;
+        const newPrice = 25000000000000000000n;
+  
+        // Create a token (tokenId = 1)
+        await treesNFT.createToken("URI_1");
+  
+        // Create an item for new token
+        await treesNFTMarket.createMarketItem(nftContractAddress, tokenId, price);
+  
+        // Customer1 purchases the item
+        await treesNFTMarket.connect(customer1).purchaseItem(nftContractAddress, itemId, {value: 15000000000000000000n});
+  
+        // Customer1 attempt to put the item on sale without passing the listing price
+        await expect(treesNFTMarket.connect(customer1).putItemOnSale(nftContractAddress, itemId, newPrice))
+                    .to.be.revertedWith("Passed Value must be equal to listing price");
+      });
+
+      
+      it("Should revert if caller is not the marketplace owner and does not pass the correct listing price", async function () {
+        const { treesNFT, treesNFTMarket, nftContractAddress, customer1 } = await loadFixture(deployContractsFixture);
+        
+        const tokenId = 1;
+        const itemId = 1;
+        const price = 15000000000000000000n;
+        const newPrice = 25000000000000000000n;
+        const wrongListingPrice = 45000;
+
+        // Create a token (tokenId = 1)
+        await treesNFT.createToken("URI_1");
+  
+        // Create an item for new token
+        await treesNFTMarket.createMarketItem(nftContractAddress, tokenId, price);
+  
+        // Customer1 purchases the item
+        await treesNFTMarket.connect(customer1).purchaseItem(nftContractAddress, itemId, {value: 15000000000000000000n});
+  
+        // Customer1 attempt to put the item on sale passing a wrong listing price
+        await expect(treesNFTMarket.connect(customer1).putItemOnSale(nftContractAddress, itemId, newPrice, {value: wrongListingPrice}))
+                    .to.be.revertedWith("Passed Value must be equal to listing price");
+      });
+
+
+      it("Should emit put on sale event if success", async function () {
+        const { treesNFT, treesNFTMarket, nftContractAddress, marketContractAddress, customer1 } = await loadFixture(deployContractsFixture);
+        
+        const tokenId = 1;
+        const itemId = 1;
+        const price = 15000000000000000000n;
+        const newPrice = 25000000000000000000n;
+        const listingPrice = await treesNFTMarket.getListingPrice();
+
+        // Create a token (tokenId = 1)
+        await treesNFT.createToken("URI_1");
+  
+        // Create an item for new token
+        await treesNFTMarket.createMarketItem(nftContractAddress, tokenId, price);
+  
+        // Customer1 purchases the item
+        await treesNFTMarket.connect(customer1).purchaseItem(nftContractAddress, itemId, {value: 15000000000000000000n});
+
+        // Customer1 approves marketplace for token
+        await treesNFT.connect(customer1).approve(marketContractAddress, tokenId);
+
+        // Customer1 puts the item on sale passing the right listing price
+        expect(await treesNFTMarket.connect(customer1).putItemOnSale(nftContractAddress, itemId, newPrice, {value: listingPrice}))
+              .to.emit(treesNFT, "MarketItemPutOnSale")
+              .withArgs({itemId: itemId, tokenId: tokenId, price: newPrice, seller: customer1.address, 
+                        owner: customer1.address, nftContract: nftContractAddress, forSale: true});
+      
+      });
+
+    }); //describe("Put an item on sale"
+
+
+    describe("Remove an item from sale", function () {
+
+      it("Should revert if item does not exist (the caller can therefore not be the item seller", async function () {
+        const { treesNFTMarket, nftContractAddress } = await loadFixture(deployContractsFixture);
+        
+        const itemId = 1;
+        const newPrice = 15000000000000000000n;
+
+        // Attempt to purchase the item with value 0 (omitted)
+        await expect(treesNFTMarket.removeItemFromSale(nftContractAddress, itemId))
+                    .to.be.revertedWith("You must be the item seller");
+      });
+
+
+      it("Should revert if the caller is not the item seller", async function () {
+        const { treesNFT, treesNFTMarket, nftContractAddress, customer1 } = await loadFixture(deployContractsFixture);
+        
+        const tokenId = 1;
+        const itemId = 1;
+        const price = 15000000000000000000n;
 
         // Create a token (tokenId = 1)
         await treesNFT.createToken("URI_1");
@@ -304,12 +433,228 @@ describe("TreesNFTMarket contract tests", function () {
         const newPrice = 25000000000000000000n;
 
         // Attempt to purchase the item with value 0 (omitted)
-        await expect(treesNFTMarket.putItemOnSale(nftContractAddress, itemId, newPrice))
-                    .to.be.revertedWith("Item already is for sale");
+        await expect(treesNFTMarket.connect(customer1).removeItemFromSale(nftContractAddress, itemId))
+                    .to.be.revertedWith("You must be the item seller");
       });
 
-    }); //describe("Put an item on sale"
+      
+      it("Should revert if the item already is NOT for sale", async function () {
+        const { treesNFT, treesNFTMarket, nftContractAddress } = await loadFixture(deployContractsFixture);
+        
+        const tokenId = 1;
+        const itemId = 1;
+        const price = 15000000000000000000n;
+        const newPrice = 25000000000000000000n;
+
+        // Create a token (tokenId = 1)
+        await treesNFT.createToken("URI_1");
+
+        // Create an item for new token (automatically puts the item on sale)
+        await treesNFTMarket.createMarketItem(nftContractAddress, tokenId, price);
+
+        // Remove item from sale a first time
+        await treesNFTMarket.removeItemFromSale(nftContractAddress, tokenId);
+
+        // Attempt to remove item from sale again
+        await expect(treesNFTMarket.removeItemFromSale(nftContractAddress, itemId))
+                    .to.be.revertedWith("Item is not for sale");
+      });      
+
+
+      it("Should emit item removed from sale event if success", async function () {
+
+        const { treesNFT, treesNFTMarket, nftContractAddress, owner } = await loadFixture(deployContractsFixture);
+        
+        const tokenId = 1;
+        const itemId = 1;
+        const price = 15000000000000000000n;
+
+        // Create a token (tokenId = 1)
+        await treesNFT.createToken("URI_1");
+
+        // Create an item for new token (automatically puts the item on sale)
+        await treesNFTMarket.createMarketItem(nftContractAddress, tokenId, price);
+
+        // Remove item from sale
+        expect(await treesNFTMarket.removeItemFromSale(nftContractAddress, itemId))
+              .to.emit(treesNFT, "MarketItemRemovedFromSale")
+              .withArgs({itemId: itemId, tokenId: tokenId, price: price, seller: owner.address, 
+                        owner: owner.address, nftContract: nftContractAddress, forSale: false});
+      });
+
+    }); //describe("Remove an item from sale
 
   }); //describe("Marketplace actions"
 
-}); //describe("TreesNFT contract tests"
+
+  describe("Functions for Frontend", function () {
+/*
+    describe("Fetch all marketplace items", function () {
+    
+      it("Should return the correct item count", async function () {
+
+        const { treesNFT, treesNFTMarket, nftContractAddress } = await loadFixture(deployContractsFixture);
+        
+        var tokenId;
+        const price = 15000000000000000000n;
+        const newPrice = 25000000000000000000n;
+
+        // Create 3 items
+        for (i=1 ; i<=3; i++) {
+
+          let tokenId = i;
+
+          // Create a token
+          await treesNFT.createToken("URI");
+
+          // Create an item for new token (automatically puts the item on sale)
+          await treesNFTMarket.createMarketItem(nftContractAddress, tokenId, price);
+        };
+
+        // Fetch all items and get the items array
+        let itemsArray = await treesNFTMarket.fetchAllItems();
+
+          // Attempt to remove item from sale again
+          expect(itemsArray.length).to.equal(3);
+
+      });      
+    
+    }); //describe("Fetch all marketplace items"
+*/
+
+    describe("Fetch all marketplace items", function () {
+    
+      it("Should return the correct item count", async function () {
+
+        const { treesNFT, treesNFTMarket, nftContractAddress, customer1 } = await loadFixture(deployContractsFixture);
+        
+        var tokenId;
+        var itemId;
+        const price = 15000000000000000000n;
+
+        // Create 6 items
+        for (i=1 ; i<=6; i++) {
+
+          let tokenId = i;
+
+          // Create a token
+          await treesNFT.createToken("URI");
+
+          // Create an item for new token (automatically puts the item on sale)
+          await treesNFTMarket.createMarketItem(nftContractAddress, tokenId, price);
+
+        };
+
+        // Customer1 purchases the 2 first items
+        for (i=1 ; i<=2; i++) {
+
+          let itemId = i;
+
+          // Customer1 purchases the item
+          await treesNFTMarket.connect(customer1).purchaseItem(nftContractAddress, itemId, {value: price});
+        };
+
+        // Fetch all items and get the items array
+        let itemsArray = await treesNFTMarket.fetchAllItems();
+
+        // Check the fetched items count
+        expect(itemsArray.length).to.equal(6);
+
+      });      
+    
+    }); //describe("Fetch all marketplace items"
+
+
+    describe("Fetch for sale marketplace items", function () {
+    
+      it("Should return the correct item count", async function () {
+
+        const { treesNFT, treesNFTMarket, nftContractAddress, customer1 } = await loadFixture(deployContractsFixture);
+        
+        var tokenId;
+        var itemId;
+        const price = 15000000000000000000n;
+
+        // Create 6 items
+        for (i=1 ; i<=6; i++) {
+
+          let tokenId = i;
+
+          // Create a token
+          await treesNFT.createToken("URI");
+
+          // Create an item for new token (automatically puts the item on sale)
+          await treesNFTMarket.createMarketItem(nftContractAddress, tokenId, price);
+
+        };
+
+        // Customer1 purchases the 2 first items (items are not for sale anymore, until new owner eventually put them on sale)
+        for (i=1 ; i<=2; i++) {
+
+          let itemId = i;
+
+          // Customer1 purchases the item
+          await treesNFTMarket.connect(customer1).purchaseItem(nftContractAddress, itemId, {value: price});
+        };
+
+        // Fetch for sale items and get the items array
+        let itemsArray = await treesNFTMarket.fetchItemsForSale();
+
+        // We should have 4 items for sale, the remaining marketplace ones
+        expect(itemsArray.length).to.equal(4);
+
+      });      
+      
+    }); //describe("Fetch for sale marketplace items"
+
+    describe("Fetch a specific user marketplace items", function () {
+    
+      it("Should return the correct item count", async function () {
+
+        const { treesNFT, treesNFTMarket, nftContractAddress, customer1 } = await loadFixture(deployContractsFixture);
+        
+        var tokenId;
+        var itemId;
+        const price = 15000000000000000000n;
+
+        // Create 6 items
+        for (i=1 ; i<=6; i++) {
+
+          let tokenId = i;
+
+          // Create a token
+          await treesNFT.createToken("URI");
+
+          // Create an item for new token (automatically puts the item on sale)
+          await treesNFTMarket.createMarketItem(nftContractAddress, tokenId, price);
+
+        };
+
+        // Customer1 purchases the 2 first items (items are not for sale anymore, until new owner eventually put them on sale)
+        for (i=1 ; i<=2; i++) {
+
+          let itemId = i;
+
+          // Customer1 purchases the item
+          await treesNFTMarket.connect(customer1).purchaseItem(nftContractAddress, itemId, {value: price});
+        };
+
+        // Fetch for sale items and get the items array (marketplace owner call)
+        let itemsArray = await treesNFTMarket.fetchUserItems(customer1.address);
+
+        // We should have 2 items for customer1
+        expect(itemsArray.length).to.equal(2);
+
+        // Fetch for sale items and get the items array (user call)
+        let itemsArray2 = await treesNFTMarket.connect(customer1).fetchUserItems(customer1.address);
+
+        // We should have 2 items for customer1
+        expect(itemsArray2.length).to.equal(2);
+
+      });      
+    
+    }); //describe("Fetch a specific user marketplace items"
+
+  }); //describe("Functions for Frontend"
+
+}); //describe("TreesNFTMarket contract tests"
