@@ -25,7 +25,7 @@ contract TreesNFTMarket is ReentrancyGuard, Ownable {
     uint256 _listingPrice = 0.000045 ether;
 
     // Owner of market i.e. contract address 
-    address payable MKPOwner;
+    address payable immutable MKPOwner;
 
     //For each user items for sale
     mapping(address => Counters.Counter) private itemsForSale;
@@ -95,6 +95,11 @@ contract TreesNFTMarket is ReentrancyGuard, Ownable {
         bool forSale
     );
 
+    // Event to generate when the listing price has been changed
+    event ListingPriceChanged (
+        uint256 olderListingPrice,
+        uint256 newListingPrice
+    );
 
 
     /// @dev Returns the listing price
@@ -104,6 +109,7 @@ contract TreesNFTMarket is ReentrancyGuard, Ownable {
 
     /// @dev Returns the listing price
     function setListingPrice(uint256 newListingPrice) public onlyOwner {
+        emit ListingPriceChanged (_listingPrice, newListingPrice);
         _listingPrice = newListingPrice;
     }
 
@@ -181,16 +187,10 @@ contract TreesNFTMarket is ReentrancyGuard, Ownable {
         require(msg.sender != idToMarketItem[itemId].owner, "You already own this item");
 
         // Item must be for sale
-        require(forSale == true, "Item is not for sale");
+        require(forSale, "Item is not for sale");
 
         // To make sure price must be equal to given price
         require(msg.value == price, "Please submit the asking price in order to complete the purchase");
-        
-        // Transfer amount of token to seller
-        itemSeller.transfer(msg.value);
-        
-        // Transfer ownership of token to msg.sender(i.e. purchaser )
-        IERC721(nftContract).transferFrom(address(this), msg.sender, tokenId);
         
         // Update Owner and Sold Details
         idToMarketItem[itemId].owner = payable(msg.sender);
@@ -199,14 +199,6 @@ contract TreesNFTMarket is ReentrancyGuard, Ownable {
         // Decrement items for sale counters
         _itemsForSale.decrement();
         itemsForSale[itemSeller].decrement();
-
-        // Transfer listing price to owner of MarketPlace
-        // If the seller is the MarketPlace owner, then he previously put the item on the MarketPlace using CreateMarketItem.
-        // No listing price is payed by the MarketPlace owner when he puts an item on the MarketPlace --> no listing price to pay forward to the MarketPlace here
-        if (idToMarketItem[itemId].seller != MKPOwner) {
-
-            MKPOwner.transfer(_listingPrice);
-        }
 
         // Emit purchase event
         emit MarketItemPurchased (
@@ -217,6 +209,21 @@ contract TreesNFTMarket is ReentrancyGuard, Ownable {
             msg.sender, // new owner
             nftContract,
             forSale );
+
+        // Transfer listing price to owner of MarketPlace
+        // If the seller is the MarketPlace owner, then he previously put the item on the MarketPlace using CreateMarketItem.
+        // No listing price is payed by the MarketPlace owner when he puts an item on the MarketPlace --> no listing price to pay forward to the MarketPlace here
+        if (idToMarketItem[itemId].seller != MKPOwner) {
+
+            MKPOwner.transfer(_listingPrice);
+        }
+
+        // Transfer amount of token to seller
+        itemSeller.transfer(msg.value);
+        
+        // Transfer ownership of token to msg.sender(i.e. purchaser )
+        IERC721(nftContract).transferFrom(address(this), msg.sender, tokenId);
+
     }
 
     /// @dev 1.3. Put an owned item on sale on the MarketPlace
@@ -230,7 +237,7 @@ contract TreesNFTMarket is ReentrancyGuard, Ownable {
         require(idToMarketItem[itemId].owner == msg.sender, "You must be the Item owner");
 
         // Item must not already be for sale
-        require(idToMarketItem[itemId].forSale == false, "Item already is for sale");
+        require(! idToMarketItem[itemId].forSale, "Item already is for sale");
 
         // Caller must pay the listing price if not market place owner
         require(msg.value == _listingPrice || msg.sender == MKPOwner, "Passed Value must be equal to listing price");
@@ -269,7 +276,7 @@ contract TreesNFTMarket is ReentrancyGuard, Ownable {
         require(msg.sender == idToMarketItem[itemId].seller, "You must be the item seller");
 
         // Item must be for sale
-        require(idToMarketItem[itemId].forSale == true, "Item is not for sale");
+        require(idToMarketItem[itemId].forSale, "Item is not for sale");
 
         // Remove item from sale
         idToMarketItem[itemId].forSale = false;
@@ -279,9 +286,6 @@ contract TreesNFTMarket is ReentrancyGuard, Ownable {
 
         // Decrement MarketPlace's items for sale
         itemsForSale[msg.sender].decrement();
-
-        // Transfer NFT from Market Place to owner
-        IERC721(nftContract).transferFrom(address(this), msg.sender, idToMarketItem[itemId].tokenId);
 
         // Emit removed from sale event
         emit MarketItemRemovedFromSale (
@@ -293,6 +297,9 @@ contract TreesNFTMarket is ReentrancyGuard, Ownable {
             nftContract,
             false  //forSale
         );
+
+        // Transfer NFT from Market Place to owner
+        IERC721(nftContract).transferFrom(address(this), msg.sender, idToMarketItem[itemId].tokenId);
     }
 
 
@@ -324,7 +331,7 @@ contract TreesNFTMarket is ReentrancyGuard, Ownable {
 
         uint itemCount = _itemIds.current();
         uint forSaleItemCount = _itemsForSale.current();
-        uint currentIndex;
+        uint currentIndex = 0;
 
         // Declear MarketItem(i.e. struct) type array of length for sale Item number 
         MarketItem[] memory items = new MarketItem[](forSaleItemCount);
@@ -333,7 +340,7 @@ contract TreesNFTMarket is ReentrancyGuard, Ownable {
         for (uint i = 0; i < itemCount; i++) {
 
             // If item is for sale, store it in the array to be returned
-            if (idToMarketItem[i + 1].forSale == true) {
+            if (idToMarketItem[i + 1].forSale) {
                 uint currentId = i + 1;
                 MarketItem storage currentItem = idToMarketItem[currentId];
                 items[currentIndex] = currentItem;
@@ -348,8 +355,8 @@ contract TreesNFTMarket is ReentrancyGuard, Ownable {
     function fetchUserItems(address user) public view returns (MarketItem[] memory) {
         
         uint totalItemCount = _itemIds.current();
-        uint userItemCount;
-        uint currentIndex;
+        uint userItemCount = 0;
+        uint currentIndex = 0;
         address nftOwner;
 
         //If caller is contract owner, they can retrieve any user NFT list, otherwise only the caller's NFT are returned

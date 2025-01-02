@@ -15,10 +15,11 @@ contract TreesNFT is ERC721URIStorage, Ownable {
 
     using Counters for Counters.Counter;
     Counters.Counter private _tokenIds;
-    address _MKPAddress;
+    address immutable _MKPAddress;
 
     // Constructor to set Token Name, Symbol & and Get Marketplace address
     constructor(address marketplaceAddress) ERC721("TreesNFT", "TN") {
+        require(marketplaceAddress != address(0), "Marketplace contract address can not be zero address");
         _MKPAddress = marketplaceAddress;
     }
 
@@ -26,6 +27,8 @@ contract TreesNFT is ERC721URIStorage, Ownable {
     /// @param tokenURI The new token URI (URL to reach the token metadata json file)
     /// @return the new token Id
     function createToken(string memory tokenURI) public onlyOwner returns (uint) {
+
+        require(bytes(tokenURI).length > 0, "tokenURI can not be an empty string");
 
         _tokenIds.increment();  // Increment token id counter
         uint256 newTokenId = _tokenIds.current();    // The new token id
