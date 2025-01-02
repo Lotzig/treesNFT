@@ -62,6 +62,11 @@ describe("TreesNFT contract tests", function () {
       await expect(treesNFT.connect(customer1).createToken("TokenURI")).to.be.revertedWith("Ownable: caller is not the owner");
     });
 
+    it("Should revert if passed tokenURI is empty", async function () {
+      const { treesNFT, customer1 } = await loadFixture(deployTreesNFTFixture);
+      await expect(treesNFT.createToken("")).to.be.revertedWith("tokenURI can not be an empty string");
+    });
+
     it("Should mint the NFT", async function () {
         const { treesNFT, owner } = await loadFixture(deployTreesNFTFixture);
         const firstTokenId = 1;
