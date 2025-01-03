@@ -1,9 +1,10 @@
 'use client';
 import { useState, useEffect } from "react";
+import Link from 'next/link';
+
 // Pour le layout
 import { useToast } from "../ui/use-toast"; // Toast Shadcn/ui
 import { Button } from "../ui/button"; // Bouton Shadcn/ui
-import { Input } from "../ui/input"; // Input Shadcn/ui
 
 //Contract access
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useAccount } from "wagmi";
@@ -34,6 +35,7 @@ const ForSale = () => {
         , refetch: refetchForSaleTreeNFTs } = useReadContract({
     address: mkpContractAddress,
     abi: mkpContractAbi,
+    account: address,
     functionName: 'fetchItemsForSale',
   })
 
@@ -108,7 +110,10 @@ const ForSale = () => {
 
   return (
     <>
-      <div className="text-4xl">MARKET</div>
+      <div className="flex">
+        <div className="text-4xl pr-20">MARKET PLACE</div>
+        <Link className="text-3xl text-blue-600 underline" href="/Customer">Go to my TreeNFTs</Link>
+      </div>
 
       <h2 className="mt-6 mb-4 text-3xl">Available TreeNFT collection</h2>
       <div className="flex flex-col w-full">
