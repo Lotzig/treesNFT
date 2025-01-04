@@ -1,6 +1,6 @@
 // TreesNFTMArket
-export const mkpContractAddress="0x5fbdb2315678afecb367f032d93f642f64180aa3";  // local
-//export const contractAddress="0x9263CA687a3696C215E8906289643E2f724520CD";  // Sepolia
+//export const mkpContractAddress="0x5fbdb2315678afecb367f032d93f642f64180aa3";  // local
+export const contractAddress="0xe9Ca812268F02f1819bdFaafaFFB62645d6E9EB4";  // Sepolia
 export const mkpContractAbi= [
   {
     "inputs": [],
@@ -541,8 +541,8 @@ export const mkpContractAbi= [
 ]
 
 // TreesNFT
-export const nftContractAddress="0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";  // local
-//export const contractAddress="0x9263CA687a3696C215E8906289643E2f724520CD";  // Sepolia
+//export const nftContractAddress="0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";  // local
+export const contractAddress="0xc575936fD5D81Ef2E6E6EF0a6748Cd10fe7A3D42";  // Sepolia
 export const nftContractAbi=  [
   {
     "inputs": [

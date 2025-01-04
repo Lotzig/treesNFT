@@ -6,7 +6,7 @@ require("@nomicfoundation/hardhat-verify");
 require('hardhat-docgen');
 
 const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL || "";
-const PRIVATE_KEY = process.env.PRIVATE_KEY || "5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a";
+const PRIVATE_KEY = process.env.PRIVATE_KEY || "7cdf0643b1d593a5fe60616efa17ed31aaaa715d71fe31fcc4d1368b397badf0";
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
 
 module.exports = {
