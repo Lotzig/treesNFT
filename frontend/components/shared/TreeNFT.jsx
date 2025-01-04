@@ -144,11 +144,11 @@ console.log(URL.createObjectURL(img.data))
               <li>Seller : {treeNFT.seller}</li>
               <li>Owner : {treeNFT.owner}</li>
               <li>For Sale : {treeNFT.forSale.toString()}</li>
-              <li>Species : {json ? (json.data.name):("")}</li>
-              <li>Planting Date : </li>
-              <li>Location : </li>
-              <li>Location Owner Name : </li>
-              <li>Location Owner Address : </li>
+              <li>Species : {json ? (json.data.attributes[0].value):("")}</li>
+              <li>Planting Date : {json ? (json.data.attributes[2].value):("")}</li>
+              <li>Location : {json ? (json.data.attributes[3].value):("")}</li>
+              <li>Location Owner Name : {json ? (json.data.attributes[4].value):("")}</li>
+              <li>Location Owner Address : {json ? (json.data.attributes[5].value):("")}</li>
             </ul>
           </div>
       </div>
